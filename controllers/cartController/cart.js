@@ -53,19 +53,17 @@ const addToCart = async (req, res) => {
     }
 
     // Jika packageId diberikan, cek apakah package exists
-    if (packageId) {
-      const package = await prisma.package.findUnique({
-        where: { id: packageId },
-        select: { id: true, serviceId: true, name: true }
-      });
+    const packageData = await prisma.package.findUnique({
+      where: { id: packageId },
+      select: { id: true, serviceId: true, name: true }
+    });
 
-      if (!package) {
-        return res.status(404).json({ message: "Paket tidak ditemukan" });
-      }
+    if (!packageData) {
+      return res.status(404).json({ message: "Paket tidak ditemukan" });
+    }
 
-      if (package.serviceId !== serviceId) {
-        return res.status(400).json({ message: "Paket tidak sesuai dengan service" });
-      }
+    if (packageData.serviceId !== serviceId) {
+      return res.status(400).json({ message: "Paket tidak sesuai dengan service" });
     }
 
     // Build where condition untuk mencari item cart yang sudah ada
