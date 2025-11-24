@@ -31,8 +31,7 @@ const getUserNotifications = async (req, res) => {
 const markAsRead = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { id } = req.params; // Jika id ada, mark satu; jika tidak, mark all
-
+    const { id } = req.params; 
     if (id) {
       // Mark satu notif
       const notification = await prisma.notification.findUnique({
