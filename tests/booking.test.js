@@ -44,8 +44,7 @@ jest.mock("@prisma/client", () => {
   };
 });
 
-// Mock mailer, supaya tidak benar-benar mengirim email
-jest.mock("../../services/mailer", () => ({
+jest.mock("../services/mailer", () => ({
   sendMail: jest.fn(),
   buildAdminBookingEmail: jest.fn(() => ({
     subject: "subject",
@@ -76,7 +75,7 @@ const {
   confirmBooking,
   rejectBooking,
   completeBooking,
-} = require("./booking");
+} = require("../controllers/bookingController/booking");
 
 // Helper untuk bikin response palsu ala Express
 function createMockRes() {

@@ -21,7 +21,7 @@ jest.mock("@prisma/client", () => {
 const {
   getUserNotifications,
   markAsRead,
-} = require("./notification");
+} = require("../controllers/notificationController/notification");
 
 // Helper response palsu ala Express
 function createMockRes() {
