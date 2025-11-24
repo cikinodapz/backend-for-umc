@@ -1,7 +1,3 @@
-// __tests__/cartController.test.js
-
-// Mock Prisma Client sebelum import controller
-// PENTING: Mock harus didefinisikan sebelum require controller
 jest.mock("@prisma/client", () => {
   const mockPrismaClient = {
     cart: {
@@ -33,37 +29,31 @@ const {
   updateCartItem,
   removeFromCart,
   clearCart,
-} = require("../controllers/cartController/cart"); // Sesuaikan path ini dengan struktur project Anda
+} = require("../controllers/cartController/cart"); 
 
-// Inisialisasi mock prisma instance
 const prisma = new PrismaClient();
 
 describe("Cart Controller", () => {
   let req, res;
 
-  // Setup mock req dan res sebelum setiap test
   beforeEach(() => {
-    // Mock request object
     req = {
-      user: { id: "user-123" }, // Simulasi user yang sudah authenticated
+      user: { id: "user-123" },
       body: {},
       params: {},
     };
 
-    // Mock response object
     res = {
-      status: jest.fn().mockReturnThis(), // mockReturnThis() agar bisa chain .json()
+      status: jest.fn().mockReturnThis(),
       json: jest.fn().mockReturnThis(),
     };
 
-    // Clear semua mock sebelum setiap test
     jest.clearAllMocks();
   });
 
-  // ==================== GET CART BY USER ====================
+  //GET CART BY USER
   describe("getCartByUser", () => {
     it("should return cart items for authenticated user", async () => {
-      // Mock data yang akan dikembalikan
       const mockCartItems = [
         {
           id: "cart-1",
@@ -125,7 +115,7 @@ describe("Cart Controller", () => {
     });
   });
 
-  // ==================== ADD TO CART ====================
+  //ADD TO CART
   describe("addToCart", () => {
     it("should add new item to cart successfully", async () => {
       req.body = {
@@ -160,7 +150,7 @@ describe("Cart Controller", () => {
 
       prisma.service.findUnique.mockResolvedValue(mockService);
       prisma.package.findUnique.mockResolvedValue(mockPackage);
-      prisma.cart.findFirst.mockResolvedValue(null); // Item belum ada di cart
+      prisma.cart.findFirst.mockResolvedValue(null);
       prisma.cart.create.mockResolvedValue(mockCartItem);
 
       await addToCart(req, res);
@@ -197,7 +187,7 @@ describe("Cart Controller", () => {
 
       const updatedCartItem = {
         ...existingCartItem,
-        quantity: 5, // 3 + 2
+        quantity: 5,
       };
 
       prisma.service.findUnique.mockResolvedValue(mockService);
@@ -219,7 +209,7 @@ describe("Cart Controller", () => {
     });
 
     it("should return 400 if serviceId is missing", async () => {
-      req.body = {}; // Tidak ada serviceId
+      req.body = {};
 
       await addToCart(req, res);
 
@@ -293,7 +283,7 @@ describe("Cart Controller", () => {
       });
       prisma.package.findUnique.mockResolvedValue({
         id: "package-1",
-        serviceId: "service-2", // Package milik service lain
+        serviceId: "service-2",
         name: "Package A",
       });
 
@@ -308,27 +298,23 @@ describe("Cart Controller", () => {
     it("should handle P2002 error (duplicate entry)", async () => {
       req.body = { 
         serviceId: "service-1",
-        packageId: "package-1" // Tambahkan packageId
+        packageId: "package-1"
       };
 
-      // Mock service
       prisma.service.findUnique.mockResolvedValue({
         id: "service-1",
         isActive: true,
         name: "Service A",
       });
 
-      // Mock package - PENTING: Harus di-mock juga!
       prisma.package.findUnique.mockResolvedValue({
         id: "package-1",
         serviceId: "service-1",
         name: "Package A",
       });
 
-      // Mock cart findFirst - item belum ada
       prisma.cart.findFirst.mockResolvedValue(null);
 
-      // Mock cart create - throw P2002 error
       const duplicateError = new Error("Duplicate");
       duplicateError.code = "P2002";
       prisma.cart.create.mockRejectedValue(duplicateError);
@@ -355,7 +341,7 @@ describe("Cart Controller", () => {
     });
   });
 
-  // ==================== UPDATE CART ITEM ====================
+  //UPDATE CART ITEM
   describe("updateCartItem", () => {
     it("should update cart item successfully", async () => {
       req.params = { id: "cart-1" };
@@ -468,7 +454,7 @@ describe("Cart Controller", () => {
     });
   });
 
-  // ==================== REMOVE FROM CART ====================
+  //REMOVE FROM CART
   describe("removeFromCart", () => {
     it("should remove cart item successfully", async () => {
       req.params = { id: "cart-1" };
@@ -539,7 +525,7 @@ describe("Cart Controller", () => {
     });
   });
 
-  // ==================== CLEAR CART ====================
+  //CLEAR CART
   describe("clearCart", () => {
     it("should clear all cart items for user", async () => {
       prisma.cart.deleteMany.mockResolvedValue({ count: 3 });
