@@ -156,6 +156,16 @@ describe('Auth Controller', () => {
         },
       });
     });
+
+    it('should return 500 if login fails unexpectedly', async () => {
+      req.body = { email: 'error@example.com', password: '123' };
+      prisma.user.findUnique.mockRejectedValue(new Error('DB error'));
+
+      await login(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ message: 'Terjadi kesalahan server' });
+    });
   });
 
   describe('register', () => {
@@ -204,6 +214,17 @@ describe('Auth Controller', () => {
         message: 'Registrasi berhasil',
         user: mockNewUser,
       });
+    });
+
+    it('should return 500 if register fails unexpectedly', async () => {
+      req.body = { name: 'Err User', email: 'err@example.com', phone: '1', password: 'password' };
+      prisma.user.findUnique.mockResolvedValue(null);
+      bcrypt.hash.mockRejectedValue(new Error('hash error'));
+
+      await register(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ message: 'Terjadi kesalahan server' });
     });
   });
 });
