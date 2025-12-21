@@ -3,3 +3,18 @@ node_modules
 .env
 
 /generated/prisma
+
+# Jest coverage reports (generated)
+coverage/
+
+# Temporary files
+tmp_*.txt
+temp_*.js
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

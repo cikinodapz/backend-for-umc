@@ -295,7 +295,7 @@ describe('Dashboard Controller', () => {
       expect(res.json).toHaveBeenCalledWith({ message: 'Forbidden: Admin only' });
     });
 
-    it('should return booking time series data successfully', async () => {
+    it('should return booking time series data successfully with day interval', async () => {
       req.user = { role: 'ADMIN' };
       req.query = { start: '2024-01-01T00:00:00.000Z', end: '2024-01-03T00:00:00.000Z', interval: 'day' };
 
@@ -335,6 +335,286 @@ describe('Dashboard Controller', () => {
         },
         timeline: expect.any(Array),
       });
+    });
+
+    it('should return booking time series data with week interval', async () => {
+      req.user = { role: 'ADMIN' };
+      req.query = { start: '2024-01-01T00:00:00.000Z', end: '2024-01-21T00:00:00.000Z', interval: 'week' };
+
+      const mockBookings = [
+        {
+          createdAt: new Date('2024-01-03T10:00:00.000Z'), // Wednesday
+          status: 'DIKONFIRMASI',
+          totalAmount: 100000,
+        },
+        {
+          createdAt: new Date('2024-01-10T15:00:00.000Z'), // Wednesday next week
+          status: 'MENUNGGU',
+          totalAmount: 50000,
+        },
+        {
+          createdAt: new Date('2024-01-15T12:00:00.000Z'), // Monday third week
+          status: 'SELESAI',
+          totalAmount: 75000,
+        },
+      ];
+
+      prisma.booking.findMany.mockResolvedValue(mockBookings);
+
+      await getAdminBookingTimeSeries(req, res);
+
+      expect(res.json).toHaveBeenCalledWith({
+        range: {
+          start: '2024-01-01T00:00:00.000Z',
+          end: '2024-01-21T00:00:00.000Z',
+          interval: 'week',
+        },
+        timeline: expect.any(Array),
+      });
+
+      // Verify the timeline contains week buckets
+      const result = res.json.mock.calls[0][0];
+      expect(result.timeline.length).toBeGreaterThan(0);
+      // Week keys should be Monday dates in YYYY-MM-DD format
+      result.timeline.forEach(bucket => {
+        expect(bucket.key).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      });
+    });
+
+    it('should return booking time series data with month interval', async () => {
+      req.user = { role: 'ADMIN' };
+      req.query = { start: '2024-01-01T00:00:00.000Z', end: '2024-03-31T00:00:00.000Z', interval: 'month' };
+
+      const mockBookings = [
+        {
+          createdAt: new Date('2024-01-15T10:00:00.000Z'),
+          status: 'DIKONFIRMASI',
+          totalAmount: 100000,
+        },
+        {
+          createdAt: new Date('2024-02-20T15:00:00.000Z'),
+          status: 'MENUNGGU',
+          totalAmount: 50000,
+        },
+        {
+          createdAt: new Date('2024-03-10T12:00:00.000Z'),
+          status: 'SELESAI',
+          totalAmount: 75000,
+        },
+      ];
+
+      prisma.booking.findMany.mockResolvedValue(mockBookings);
+
+      await getAdminBookingTimeSeries(req, res);
+
+      expect(res.json).toHaveBeenCalledWith({
+        range: {
+          start: '2024-01-01T00:00:00.000Z',
+          end: '2024-03-31T00:00:00.000Z',
+          interval: 'month',
+        },
+        timeline: expect.any(Array),
+      });
+
+      // Verify the timeline contains month buckets
+      const result = res.json.mock.calls[0][0];
+      expect(result.timeline.length).toBeGreaterThan(0);
+      // Month keys should be in YYYY-MM format
+      result.timeline.forEach(bucket => {
+        expect(bucket.key).toMatch(/^\d{4}-\d{2}$/);
+      });
+    });
+
+    it('should use default values when query params are not provided', async () => {
+      req.user = { role: 'ADMIN' };
+      req.query = {}; // No params
+
+      const mockBookings = [];
+      prisma.booking.findMany.mockResolvedValue(mockBookings);
+
+      await getAdminBookingTimeSeries(req, res);
+
+      expect(res.json).toHaveBeenCalled();
+      const result = res.json.mock.calls[0][0];
+      expect(result.range.interval).toBe('day'); // Default interval
+      expect(result.timeline).toEqual(expect.any(Array));
+    });
+
+    it('should fallback to day interval for invalid interval value', async () => {
+      req.user = { role: 'ADMIN' };
+      req.query = { interval: 'invalid' };
+
+      const mockBookings = [];
+      prisma.booking.findMany.mockResolvedValue(mockBookings);
+
+      await getAdminBookingTimeSeries(req, res);
+
+      expect(res.json).toHaveBeenCalled();
+      const result = res.json.mock.calls[0][0];
+      expect(result.range.interval).toBe('day');
+    });
+
+    it('should handle uppercase interval value', async () => {
+      req.user = { role: 'ADMIN' };
+      req.query = { start: '2024-01-01T00:00:00.000Z', end: '2024-01-07T00:00:00.000Z', interval: 'WEEK' };
+
+      const mockBookings = [];
+      prisma.booking.findMany.mockResolvedValue(mockBookings);
+
+      await getAdminBookingTimeSeries(req, res);
+
+      expect(res.json).toHaveBeenCalled();
+      const result = res.json.mock.calls[0][0];
+      expect(result.range.interval).toBe('week');
+    });
+
+    it('should handle bookings with null or zero totalAmount', async () => {
+      req.user = { role: 'ADMIN' };
+      req.query = { start: '2024-01-01T00:00:00.000Z', end: '2024-01-03T00:00:00.000Z', interval: 'day' };
+
+      const mockBookings = [
+        {
+          createdAt: new Date('2024-01-01T10:00:00.000Z'),
+          status: 'DIKONFIRMASI',
+          totalAmount: null,
+        },
+        {
+          createdAt: new Date('2024-01-02T15:00:00.000Z'),
+          status: 'MENUNGGU',
+          totalAmount: 0,
+        },
+        {
+          createdAt: new Date('2024-01-02T16:00:00.000Z'),
+          status: 'DITOLAK',
+          totalAmount: 'invalid', // Will result in NaN
+        },
+      ];
+
+      prisma.booking.findMany.mockResolvedValue(mockBookings);
+
+      await getAdminBookingTimeSeries(req, res);
+
+      expect(res.json).toHaveBeenCalled();
+      const result = res.json.mock.calls[0][0];
+      expect(result.timeline).toEqual(expect.any(Array));
+    });
+
+    it('should handle booking with unknown status', async () => {
+      req.user = { role: 'ADMIN' };
+      req.query = { start: '2024-01-01T00:00:00.000Z', end: '2024-01-03T00:00:00.000Z', interval: 'day' };
+
+      const mockBookings = [
+        {
+          createdAt: new Date('2024-01-01T10:00:00.000Z'),
+          status: 'UNKNOWN_STATUS', // Status not in predefined list
+          totalAmount: 100000,
+        },
+      ];
+
+      prisma.booking.findMany.mockResolvedValue(mockBookings);
+
+      await getAdminBookingTimeSeries(req, res);
+
+      expect(res.json).toHaveBeenCalled();
+      const result = res.json.mock.calls[0][0];
+      expect(result.timeline).toEqual(expect.any(Array));
+    });
+
+    it('should handle Sunday date correctly for week interval', async () => {
+      req.user = { role: 'ADMIN' };
+      // Start on a Sunday (2024-01-07 is Sunday)
+      req.query = { start: '2024-01-07T00:00:00.000Z', end: '2024-01-14T00:00:00.000Z', interval: 'week' };
+
+      const mockBookings = [
+        {
+          createdAt: new Date('2024-01-07T10:00:00.000Z'), // Sunday
+          status: 'DIKONFIRMASI',
+          totalAmount: 100000,
+        },
+      ];
+
+      prisma.booking.findMany.mockResolvedValue(mockBookings);
+
+      await getAdminBookingTimeSeries(req, res);
+
+      expect(res.json).toHaveBeenCalled();
+      const result = res.json.mock.calls[0][0];
+      // Should have week buckets based on Monday of the week
+      expect(result.timeline.length).toBeGreaterThan(0);
+    });
+
+    it('should create bucket for booking date outside pre-generated buckets', async () => {
+      req.user = { role: 'ADMIN' };
+      req.query = { start: '2024-01-01T00:00:00.000Z', end: '2024-01-03T00:00:00.000Z', interval: 'day' };
+
+      // This booking date should theoretically trigger the fallback bucket creation
+      const mockBookings = [
+        {
+          createdAt: new Date('2024-01-01T10:00:00.000Z'),
+          status: 'DIKONFIRMASI',
+          totalAmount: 100000,
+        },
+        {
+          createdAt: new Date('2024-01-02T15:00:00.000Z'),
+          status: 'DIBATALKAN',
+          totalAmount: 50000,
+        },
+      ];
+
+      prisma.booking.findMany.mockResolvedValue(mockBookings);
+
+      await getAdminBookingTimeSeries(req, res);
+
+      expect(res.json).toHaveBeenCalled();
+      const result = res.json.mock.calls[0][0];
+      expect(result.timeline.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should handle week interval with booking on edge day that creates new bucket', async () => {
+      req.user = { role: 'ADMIN' };
+      // Use a narrow date range that might not include all week buckets
+      req.query = { start: '2024-01-08T00:00:00.000Z', end: '2024-01-08T23:59:59.000Z', interval: 'week' };
+
+      // This booking is on the edge - it might create a bucket key that wasn't pre-generated
+      const mockBookings = [
+        {
+          createdAt: new Date('2024-01-08T12:00:00.000Z'),
+          status: 'DIKONFIRMASI',
+          totalAmount: 100000,
+        },
+      ];
+
+      prisma.booking.findMany.mockResolvedValue(mockBookings);
+
+      await getAdminBookingTimeSeries(req, res);
+
+      expect(res.json).toHaveBeenCalled();
+      const result = res.json.mock.calls[0][0];
+      expect(result.timeline.length).toBeGreaterThan(0);
+    });
+
+    it('should handle month interval with booking outside initial bucket range', async () => {
+      req.user = { role: 'ADMIN' };
+      // Single day range in middle of month
+      req.query = { start: '2024-02-15T00:00:00.000Z', end: '2024-02-15T23:59:59.000Z', interval: 'month' };
+
+      const mockBookings = [
+        {
+          createdAt: new Date('2024-02-15T10:00:00.000Z'),
+          status: 'MENUNGGU',
+          totalAmount: 50000,
+        },
+      ];
+
+      prisma.booking.findMany.mockResolvedValue(mockBookings);
+
+      await getAdminBookingTimeSeries(req, res);
+
+      expect(res.json).toHaveBeenCalled();
+      const result = res.json.mock.calls[0][0];
+      expect(result.timeline.length).toBeGreaterThan(0);
+      // Month key should be 2024-02
+      expect(result.timeline[0].key).toBe('2024-02');
     });
 
     it('should handle database errors', async () => {

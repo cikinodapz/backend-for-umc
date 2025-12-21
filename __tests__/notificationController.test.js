@@ -1,4 +1,9 @@
-// notificationController.test.js
+const {
+  getUserNotifications,
+  markAsRead,
+} = require('../controllers/notificationController/notification');
+
+// Mock PrismaClient
 jest.mock('@prisma/client', () => {
   const mockPrisma = {
     notification: {
@@ -8,71 +13,96 @@ jest.mock('@prisma/client', () => {
       updateMany: jest.fn(),
     },
   };
-  return { PrismaClient: jest.fn(() => mockPrisma) };
+  return {
+    PrismaClient: jest.fn(() => mockPrisma),
+  };
 });
 
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
-
-const { getUserNotifications, markAsRead } = require('./notification');
-
-
 describe('Notification Controller', () => {
-  let req, res;
+  let prisma;
+  let req;
+  let res;
 
   beforeEach(() => {
+    prisma = new (require('@prisma/client').PrismaClient)();
     req = {
       user: { id: 'user1' },
-      query: {},
       params: {},
+      query: {},
     };
     res = {
       status: jest.fn().mockReturnThis(),
       json: jest.fn(),
     };
+  });
+
+  afterEach(() => {
     jest.clearAllMocks();
   });
 
-  // ---------------------------
-  // TEST: getUserNotifications
-  // ---------------------------
-  describe('getUserNotifications()', () => {
-    it('harus mengembalikan semua notifikasi tanpa filter', async () => {
+  describe('getUserNotifications', () => {
+    it('should return all notifications without filter', async () => {
       const mockNotifications = [
-        { id: 1, message: 'Test', readAt: null },
-        { id: 2, message: 'Lainnya', readAt: new Date() },
+        { id: 'n1', userId: 'user1', message: 'Notification 1', sentAt: new Date(), readAt: null },
+        { id: 'n2', userId: 'user1', message: 'Notification 2', sentAt: new Date(), readAt: new Date() },
       ];
-
       prisma.notification.findMany.mockResolvedValue(mockNotifications);
 
       await getUserNotifications(req, res);
 
-      expect(prisma.notification.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { userId: 'user1' } })
-      );
+      expect(prisma.notification.findMany).toHaveBeenCalledWith({
+        where: { userId: 'user1' },
+        orderBy: { sentAt: 'desc' },
+      });
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         notifications: mockNotifications,
-        total: mockNotifications.length,
+        total: 2,
       });
     });
 
-    it('harus mengembalikan notifikasi yang sudah dibaca ketika read=true', async () => {
-      req.query.read = 'true';
-      prisma.notification.findMany.mockResolvedValue([{ id: 2, readAt: new Date() }]);
+    it('should return only read notifications when read=true', async () => {
+      req.query = { read: 'true' };
+      const mockNotifications = [
+        { id: 'n2', userId: 'user1', message: 'Notification 2', sentAt: new Date(), readAt: new Date() },
+      ];
+      prisma.notification.findMany.mockResolvedValue(mockNotifications);
 
       await getUserNotifications(req, res);
 
-      expect(prisma.notification.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { userId: 'user1', readAt: { not: null } },
-        })
-      );
+      expect(prisma.notification.findMany).toHaveBeenCalledWith({
+        where: { userId: 'user1', readAt: { not: null } },
+        orderBy: { sentAt: 'desc' },
+      });
       expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        notifications: mockNotifications,
+        total: 1,
+      });
     });
 
-    it('harus mengembalikan 500 kalau ada error', async () => {
-      prisma.notification.findMany.mockRejectedValue(new Error('DB error'));
+    it('should return only unread notifications when read=false', async () => {
+      req.query = { read: 'false' };
+      const mockNotifications = [
+        { id: 'n1', userId: 'user1', message: 'Notification 1', sentAt: new Date(), readAt: null },
+      ];
+      prisma.notification.findMany.mockResolvedValue(mockNotifications);
+
+      await getUserNotifications(req, res);
+
+      expect(prisma.notification.findMany).toHaveBeenCalledWith({
+        where: { userId: 'user1', readAt: null },
+        orderBy: { sentAt: 'desc' },
+      });
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        notifications: mockNotifications,
+        total: 1,
+      });
+    });
+
+    it('should return 500 on database error', async () => {
+      prisma.notification.findMany.mockRejectedValue(new Error('Database error'));
 
       await getUserNotifications(req, res);
 
@@ -81,48 +111,109 @@ describe('Notification Controller', () => {
     });
   });
 
-  // -----------------------
-  // TEST: markAsRead
-  // -----------------------
-  describe('markAsRead()', () => {
-    it('harus menandai satu notifikasi sebagai dibaca', async () => {
-      req.params.id = 'notif1';
-      prisma.notification.findUnique.mockResolvedValue({ id: 'notif1', userId: 'user1', readAt: null });
-      prisma.notification.update.mockResolvedValue({});
+  describe('markAsRead', () => {
+    describe('mark single notification', () => {
+      it('should mark single notification as read successfully', async () => {
+        req.params = { id: 'n1' };
+        const mockNotification = { id: 'n1', userId: 'user1', readAt: null };
+        prisma.notification.findUnique.mockResolvedValue(mockNotification);
+        prisma.notification.update.mockResolvedValue({ ...mockNotification, readAt: new Date() });
 
-      await markAsRead(req, res);
+        await markAsRead(req, res);
 
-      expect(prisma.notification.update).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: 'notif1' } })
-      );
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({
-        message: 'Notifikasi berhasil ditandai sebagai dibaca',
+        expect(prisma.notification.findUnique).toHaveBeenCalledWith({ where: { id: 'n1' } });
+        expect(prisma.notification.update).toHaveBeenCalledWith({
+          where: { id: 'n1' },
+          data: { readAt: expect.any(Date) },
+        });
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith({ message: 'Notifikasi berhasil ditandai sebagai dibaca' });
+      });
+
+      it('should return 404 if notification not found', async () => {
+        req.params = { id: 'nonexistent' };
+        prisma.notification.findUnique.mockResolvedValue(null);
+
+        await markAsRead(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(404);
+        expect(res.json).toHaveBeenCalledWith({ message: 'Notifikasi tidak ditemukan' });
+      });
+
+      it('should return 404 if notification belongs to different user', async () => {
+        req.params = { id: 'n1' };
+        const mockNotification = { id: 'n1', userId: 'otherUser', readAt: null };
+        prisma.notification.findUnique.mockResolvedValue(mockNotification);
+
+        await markAsRead(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(404);
+        expect(res.json).toHaveBeenCalledWith({ message: 'Notifikasi tidak ditemukan' });
+      });
+
+      it('should return 400 if notification already read', async () => {
+        req.params = { id: 'n1' };
+        const mockNotification = { id: 'n1', userId: 'user1', readAt: new Date() };
+        prisma.notification.findUnique.mockResolvedValue(mockNotification);
+
+        await markAsRead(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({ message: 'Notifikasi sudah dibaca' });
       });
     });
 
-    it('harus return 404 kalau notifikasi tidak ditemukan', async () => {
-      req.params.id = 'notif1';
-      prisma.notification.findUnique.mockResolvedValue(null);
+    describe('mark all notifications', () => {
+      it('should mark all unread notifications as read successfully', async () => {
+        req.params = {}; // No id param
 
-      await markAsRead(req, res);
+        await markAsRead(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith({ message: 'Notifikasi tidak ditemukan' });
+        expect(prisma.notification.updateMany).toHaveBeenCalledWith({
+          where: { userId: 'user1', readAt: null },
+          data: { readAt: expect.any(Date) },
+        });
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith({ message: 'Semua notifikasi berhasil ditandai sebagai dibaca' });
+      });
+
+      it('should mark all when id is undefined', async () => {
+        req.params = { id: undefined };
+
+        await markAsRead(req, res);
+
+        expect(prisma.notification.updateMany).toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(200);
+      });
+
+      it('should mark all when id is empty string', async () => {
+        req.params = { id: '' };
+
+        await markAsRead(req, res);
+
+        expect(prisma.notification.updateMany).toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(200);
+      });
     });
 
-    it('harus menandai semua notifikasi kalau id tidak ada', async () => {
-      prisma.notification.updateMany.mockResolvedValue({ count: 2 });
+    it('should return 500 on database error for single notification', async () => {
+      req.params = { id: 'n1' };
+      prisma.notification.findUnique.mockRejectedValue(new Error('Database error'));
 
       await markAsRead(req, res);
 
-      expect(prisma.notification.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { userId: 'user1', readAt: null } })
-      );
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({
-        message: 'Semua notifikasi berhasil ditandai sebagai dibaca',
-      });
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ message: 'Terjadi kesalahan server' });
+    });
+
+    it('should return 500 on database error for mark all', async () => {
+      req.params = {};
+      prisma.notification.updateMany.mockRejectedValue(new Error('Database error'));
+
+      await markAsRead(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ message: 'Terjadi kesalahan server' });
     });
   });
 });
