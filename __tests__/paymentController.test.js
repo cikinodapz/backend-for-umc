@@ -331,6 +331,7 @@ describe('Payment Controller', () => {
 
             expect(res.status).toHaveBeenCalledWith(500);
         });
+
     });
 
     describe('getPaymentDetails', () => {
@@ -490,6 +491,74 @@ describe('Payment Controller', () => {
                 .mockResolvedValueOnce(null) // First lookup fails
                 .mockResolvedValueOnce({ id: 'p1', referenceNo: 'bk-12345678-000000' }); // Alternative found
             prisma.payment.findMany.mockResolvedValue([]);
+
+            await handleMidtransNotification(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        it('should handle notification with settlement status', async () => {
+            // Default mock returns settlement status which maps to PAID
+            req.body = { order_id: 'bk-12345678-123456' };
+            prisma.payment.findFirst.mockResolvedValue({
+                id: 'p1',
+                bookingId: 'b1',
+                status: 'PENDING',
+                referenceNo: 'bk-12345678-123456',
+                booking: { id: 'b1', userId: 'user1', status: 'DIKONFIRMASI' },
+            });
+            prisma.user.findMany.mockResolvedValue([]);
+            prisma.booking.findUnique.mockResolvedValue({
+                id: 'b1',
+                startDate: new Date(),
+                endDate: new Date(),
+                totalAmount: 100000,
+                user: { id: 'user1', name: 'Test User', email: 'test@example.com' },
+            });
+
+            await handleMidtransNotification(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        it('should not update when payment already PAID', async () => {
+            req.body = { order_id: 'bk-12345678-123456' };
+            // Default mock returns settlement, but payment is already PAID
+            prisma.payment.findFirst.mockResolvedValue({
+                id: 'p1',
+                bookingId: 'b1',
+                status: 'PAID', // Already PAID
+                referenceNo: 'bk-12345678-123456',
+                booking: { id: 'b1', userId: 'user1', status: 'DIBAYAR' },
+            });
+
+            await handleMidtransNotification(req, res);
+
+            // Should return already processed message
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        it('should send emails when payment becomes PAID and admins exist', async () => {
+            const mailer = require('../services/mailer');
+
+            req.body = { order_id: 'bk-12345678-123456' };
+            prisma.payment.findFirst.mockResolvedValue({
+                id: 'p1',
+                bookingId: 'b1',
+                status: 'PENDING',
+                referenceNo: 'bk-12345678-123456',
+                booking: { id: 'b1', userId: 'user1', status: 'DIKONFIRMASI' },
+            });
+            prisma.booking.findUnique.mockResolvedValue({
+                id: 'b1',
+                startDate: new Date(),
+                endDate: new Date(),
+                totalAmount: 100000,
+                user: { id: 'user1', name: 'Test User', email: 'test@example.com' },
+            });
+            prisma.user.findMany.mockResolvedValue([
+                { email: 'admin@example.com', name: 'Admin' },
+            ]);
 
             await handleMidtransNotification(req, res);
 

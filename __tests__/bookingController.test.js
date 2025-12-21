@@ -360,6 +360,37 @@ describe('Booking Controller', () => {
             expect(res.status).toHaveBeenCalledWith(201);
         });
 
+        it('should create booking with package rate', async () => {
+            req.body = {
+                startDate: '2024-01-01',
+                endDate: '2024-01-05',
+                items: [{ serviceId: 's1', packageId: 'p1', quantity: 1 }],
+            };
+            prisma.service.findUnique.mockResolvedValue({
+                id: 's1',
+                isActive: true,
+                name: 'Service 1',
+                unitRate: { toNumber: () => 10000 },
+            });
+            prisma.package.findUnique.mockResolvedValue({
+                id: 'p1',
+                serviceId: 's1', // Matching service
+                unitRate: { toNumber: () => 8000 },
+            });
+            prisma.booking.create.mockResolvedValue({
+                id: 'b1',
+                userId: 'user1',
+                status: 'MENUNGGU',
+                items: [],
+            });
+            prisma.user.findMany.mockResolvedValue([]);
+
+            await createBooking(req, res);
+
+            expect(prisma.booking.create).toHaveBeenCalled();
+            expect(res.status).toHaveBeenCalledWith(201);
+        });
+
         it('should return 500 on database error', async () => {
             req.body = {
                 startDate: '2024-01-01',
@@ -517,6 +548,19 @@ describe('Booking Controller', () => {
 
             expect(res.status).toHaveBeenCalledWith(500);
         });
+
+        it('should return 404 on P2025 error code', async () => {
+            req.params = { id: 'b1' };
+            prisma.booking.findFirst.mockResolvedValue({ id: 'b1', status: 'MENUNGGU' });
+            const error = new Error('Not found');
+            error.code = 'P2025';
+            prisma.booking.update.mockRejectedValue(error);
+
+            await cancelBooking(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(404);
+            expect(res.json).toHaveBeenCalledWith({ message: 'Booking tidak ditemukan' });
+        });
     });
 
     describe('getAllBookings', () => {
@@ -644,6 +688,19 @@ describe('Booking Controller', () => {
 
             expect(res.status).toHaveBeenCalledWith(500);
         });
+
+        it('should return 404 on P2025 error', async () => {
+            req.user.role = 'ADMIN';
+            req.params = { id: 'b1' };
+            prisma.booking.findUnique.mockResolvedValue({ id: 'b1', userId: 'user1', status: 'MENUNGGU' });
+            const error = new Error('Not found');
+            error.code = 'P2025';
+            prisma.booking.update.mockRejectedValue(error);
+
+            await confirmBooking(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(404);
+        });
     });
 
     describe('rejectBooking', () => {
@@ -701,6 +758,19 @@ describe('Booking Controller', () => {
 
             expect(res.status).toHaveBeenCalledWith(500);
         });
+
+        it('should return 404 on P2025 error', async () => {
+            req.user.role = 'ADMIN';
+            req.params = { id: 'b1' };
+            prisma.booking.findUnique.mockResolvedValue({ id: 'b1', userId: 'user1', status: 'MENUNGGU' });
+            const error = new Error('Not found');
+            error.code = 'P2025';
+            prisma.booking.update.mockRejectedValue(error);
+
+            await rejectBooking(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(404);
+        });
     });
 
     describe('completeBooking', () => {
@@ -757,6 +827,19 @@ describe('Booking Controller', () => {
             await completeBooking(req, res);
 
             expect(res.status).toHaveBeenCalledWith(500);
+        });
+
+        it('should return 404 on P2025 error', async () => {
+            req.user.role = 'ADMIN';
+            req.params = { id: 'b1' };
+            prisma.booking.findUnique.mockResolvedValue({ id: 'b1', userId: 'user1', status: 'DIKONFIRMASI' });
+            const error = new Error('Not found');
+            error.code = 'P2025';
+            prisma.booking.update.mockRejectedValue(error);
+
+            await completeBooking(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(404);
         });
     });
 });
